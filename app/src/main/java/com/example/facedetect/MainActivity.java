@@ -1,85 +1,90 @@
 package com.example.facedetect;
 
-import android.content.Intent;
-import android.graphics.Bitmap;
+import android.graphics.PixelFormat;
 import android.hardware.Camera;
-import android.net.Uri;
 import android.os.Bundle;
-import android.provider.MediaStore;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.Toast;
-import android.widget.VideoView;
 
-import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
-import java.io.IOException;
+import com.example.facedetect.listener.FaceDetectionListener;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements SurfaceHolder.Callback {
 
-    private static final int REQUEST_VIDEO_CAPTURE = 22;
-
+    private Camera mCamera;
+    boolean mPreviewRunning = false;
+    private static SurfaceHolder PreviewHolder;
+    private SurfaceView Preview;
     Button cameraButton;
-    VideoView cameraArea;
-    Camera mCamera;
-    SurfaceHolder mHolder;
-    //SurfaceView surfaceView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         super.onCreate(savedInstanceState);
+        getWindow().setFormat(PixelFormat.TRANSLUCENT);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_main);
-
-        cameraButton = findViewById(R.id.cameraButton);
-        cameraArea = findViewById(R.id.cameraArea);
-        mHolder = cameraArea.getHolder();
-        //surfaceView = findViewById(R.id.surfaceView);
-        //surfaceView.setZOrderOnTop(true);
-        //mHolder.addCallback((SurfaceHolder.Callback) this);
-
+        Preview = findViewById(R.id.cameraArea);
+        PreviewHolder = Preview.getHolder();
+        PreviewHolder.addCallback(this);
+        PreviewHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+        cameraButton = findViewById(R.id.detectButton);
         cameraButton.setOnClickListener(new View.OnClickListener() {
-
             @Override
             public void onClick(View view) {
-                Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-//                try {
-//                    mCamera.setPreviewDisplay(mHolder);
-//                    mCamera.startPreview();
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-//                cameraIntent.putExtra(
-//                        "android.data.extras.CAMERA_FACING",
-//                        1
-//                );
-                startActivityForResult(cameraIntent, REQUEST_VIDEO_CAPTURE);
+                mCamera.setFaceDetectionListener(new FaceDetectionListener());
+                startFaceDetection();
             }
         });
+    }
 
-//        FaceDetectorOptions realTimeDetection =
-//                new FaceDetectorOptions.Builder()
-//                        .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
-//                        .build();
-//        detector = FaceDetection.getClient(realTimeDetection);
+    public void startFaceDetection(){
+        // Try starting Face Detection
+        Camera.Parameters parameters = mCamera.getParameters();
+
+        // start face detection only *after* preview has started
+        if (parameters.getMaxNumDetectedFaces() > 0){
+            // camera supports face detection, so can start it:
+            mCamera.startFaceDetection();
+        }
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-
-        if (requestCode == REQUEST_VIDEO_CAPTURE && resultCode == RESULT_OK) {
-            Uri videoUri = data.getData();
-            cameraArea.setVideoURI(videoUri);
-        } else {
-            Toast.makeText(this, "Cancelled", Toast.LENGTH_SHORT).show();
-        }
-        super.onActivityResult(requestCode, resultCode, data);
+    public void surfaceCreated(@NonNull SurfaceHolder surfaceHolder) {
+        mCamera = Camera.open();
+        startFaceDetection();
     }
 
-//    public final void startFaceDetection () {
-//
-//    }
+    @Override
+    public void surfaceChanged(@NonNull SurfaceHolder surfaceHolder, int format, int w, int h) {
+        try {
+            if (mPreviewRunning) {
+                mCamera.stopPreview();
+                mPreviewRunning = false;
+            }
+            Camera.Parameters parameters = mCamera.getParameters();
+            parameters.setPreviewSize(w, h);
+            mCamera.setParameters(parameters);
+            mCamera.setPreviewDisplay(surfaceHolder);
+            mCamera.startPreview();
+            startFaceDetection();
+        } catch (Exception e) {
+
+        }
+    }
+
+    @Override
+    public void surfaceDestroyed(@NonNull SurfaceHolder surfaceHolder) {
+        mCamera.stopPreview();
+        mPreviewRunning = false;
+        mCamera.release();
+        mCamera = null;
+    }
 }
